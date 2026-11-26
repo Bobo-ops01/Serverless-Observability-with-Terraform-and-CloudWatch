@@ -35,7 +35,7 @@ variable "alert_email" {
 
 variable "lambda_functions" {
   type        = list(string)
-  default     = ["job-alerts-function"]
+  default     = ["job-alerts-function", "weekly-learning-digest", "doc-pipeline-analyzer"]
   description = "Lambda functions to put on the dashboard and alarm on errors."
 }
 
@@ -127,4 +127,29 @@ output "dashboard_name" {
 
 output "sns_topic_arn" {
   value = aws_sns_topic.alerts.arn
+}
+
+variable "weekly_functions" {
+  type        = list(string)
+  default     = ["weekly-learning-digest"]
+  description = "Functions that should run at least once a week. Alarm if they stop."
+}
+
+resource "aws_cloudwatch_metric_alarm" "not_running_weekly" {
+  for_each = toset(var.weekly_functions)
+
+  alarm_name          = "${each.key}-not-running"
+  alarm_description   = "${each.key} had no invocations for 7 days"
+  namespace           = "AWS/Lambda"
+  metric_name         = "Invocations"
+  dimensions          = { FunctionName = each.key }
+  statistic           = "Sum"
+  period              = 86400
+  evaluation_periods  = 7
+  datapoints_to_alarm = 7
+  threshold           = 1
+  comparison_operator = "LessThanThreshold"
+  treat_missing_data  = "breaching"
+  alarm_actions       = [aws_sns_topic.alerts.arn]
+  ok_actions          = [aws_sns_topic.alerts.arn]
 }
